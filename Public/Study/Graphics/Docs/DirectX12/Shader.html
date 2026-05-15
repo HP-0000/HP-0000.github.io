@@ -1,0 +1,1140 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+  <meta charset="UTF-8">
+
+  <link rel="canonical" href="/Public/Study/Graphics/Docs/DirectX12/Shader" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <meta name="description" content="CompileDirectXShaderCompiler (DXC) 를 사용하여 컴파일 해야한다.https://github.com/microsoft/DirectXShaderCompiler컴파일 결과물은 DXIL(DirectX Intermediate Language)GPU 하드웨어에 종속...">
+
+  <meta property="og:site_name" content="My digital garden">
+
+  <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgo=">
+
+  <link rel="stylesheet" href="/styles.css">
+
+  
+  <meta property="og:description" content="CompileDirectXShaderCompiler (DXC) 를 사용하여 컴파일 해야한다.https://github.com/microsoft/DirectXShaderCompiler컴파일 결과물은 DXIL(DirectX Intermediate Language)GPU 하드웨어에 종속..."/>
+  
+
+  
+  <meta property="og:title" content="Shader">
+  <meta property="og:type" content="article">
+  
+
+  
+  <meta property="article:published_time" content="2026-06-23T10:46:51+09:00">
+  <meta property="article:author" content="/">
+  
+
+  <meta property="og:url" content="/Public/Study/Graphics/Docs/DirectX12/Shader" />
+
+  
+
+  <title>
+    
+      Shader &mdash; My digital garden
+    
+  </title>
+</head>
+
+  <body>
+    <nav><div>
+    <a class="internal-link" href="/"><b>My digital garden</b></a>
+</div>
+</nav>
+    <div class="wrapper">
+      <main><article>
+  <div>
+    <h1>Shader</h1>
+    <time datetime="2026-06-23T09:51:41+09:00">
+      Last updated on June 23, 2026
+      
+    </time>
+  </div>
+
+  <div id="notes-entry-container">
+    <content>
+      <h1 id="compile">Compile</h1>
+<p>DirectXShaderCompiler (DXC) 를 사용하여 컴파일 해야한다.<br>
+https://github.com/microsoft/DirectXShaderCompiler<br>
+컴파일 결과물은 DXIL(DirectX Intermediate Language)<br>
+GPU 하드웨어에 종속되지 않은 바이너리 덩어리다.<br>
+PSO가 생성될때 비로서 최종 기계어로 변환 된다.</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>#include &lt;d3d12.h&gt;
+#include &lt;dxcapi.h&gt;
+#include &lt;wrl/client.h&gt;
+
+using Microsoft::WRL::ComPtr;
+
+// 1. DXC 인스턴스 생성
+ComPtr&lt;IDxcUtils&gt; pUtils;
+DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&amp;pUtils));
+
+ComPtr&lt;IDxcCompiler3&gt; pCompiler;
+DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&amp;pCompiler));
+
+ComPtr&lt;IDxcIncludeHandler&gt; pIncludeHandler;
+pUtils-&gt;CreateDefaultIncludeHandler(&amp;pIncludeHandler);
+
+
+// 2. HLSL 소스 코드 읽기
+ComPtr&lt;IDxcBlobEncoding&gt; pSourceBlob;
+
+pUtils-&gt;LoadFile(
+    L"Shader.hlsl",
+    nullptr,
+    &amp;pSourceBlob);
+
+
+// 3. 컴파일 옵션 지정
+LPCWSTR pszArgs[] =
+{
+    L"-E", L"MSMain",   // 진입점 함수
+    L"-T", L"ms_6_8",   // 셰이더 프로파일
+};
+
+
+// 4. 컴파일 실행
+DxcBuffer Source = {};
+
+Source.Ptr      = pSourceBlob-&gt;GetBufferPointer();
+Source.Size     = pSourceBlob-&gt;GetBufferSize();
+Source.Encoding = DXC_CP_UTF8;
+
+ComPtr&lt;IDxcResult&gt; pResult;
+
+HRESULT hr = pCompiler-&gt;Compile(
+    &amp;Source,
+    pszArgs,
+    _countof(pszArgs),
+    pIncludeHandler.Get(),
+    IID_PPV_ARGS(&amp;pResult));
+
+
+// 5. 결과 확인
+HRESULT CompileResult = S_OK;
+pResult-&gt;GetStatus(&amp;CompileResult);
+
+if (FAILED(CompileResult))
+{
+    ComPtr&lt;IDxcBlobUtf8&gt; pErrorBlob;
+
+    pResult-&gt;GetOutput(
+        DXC_OUT_ERRORS,
+        IID_PPV_ARGS(&amp;pErrorBlob),
+        nullptr);
+
+    if (pErrorBlob)
+    {
+        printf("%s\n", pErrorBlob-&gt;GetStringPointer());
+    }
+}
+else
+{
+	//----------------------------------------------------------  
+	// DXIL Object (DXIL Container)  
+	//----------------------------------------------------------
+
+	ComPtr&lt;IDxcBlob&gt; pDXILObjectBlob;  
+	  
+	pResult-&gt;GetOutput(  
+		DXC_OUT_OBJECT,  
+		IID_PPV_ARGS(&amp;pDXILObjectBlob),  
+		nullptr);
+
+    D3D12_SHADER_BYTECODE DXILByteCode =
+    {
+        pDXILObjectBlob-&gt;GetBufferPointer(),
+        pDXILObjectBlob-&gt;GetBufferSize()
+    };
+    //----------------------------------------------------------
+    // Embedded Root Signature
+    //----------------------------------------------------------
+    ComPtr&lt;IDxcBlob&gt; pRootSignatureBlob;
+    hr = pResult-&gt;GetOutput(
+        DXC_OUT_ROOT_SIGNATURE,
+        IID_PPV_ARGS(&amp;pRootSignatureBlob),
+        nullptr);
+    if (SUCCEEDED(hr))
+    {
+        ComPtr&lt;ID3D12RootSignature&gt; pRootSignature;
+        pDevice-&gt;CreateRootSignature(
+            0,
+            pRootSignatureBlob-&gt;GetBufferPointer(),
+            pRootSignatureBlob-&gt;GetBufferSize(),
+            IID_PPV_ARGS(&amp;pRootSignature));
+            
+        // 내용 분석
+        ComPtr&lt;ID3D12RootSignatureDeserializer&gt; deserializer;
+		D3D12CreateRootSignatureDeserializer(
+		    pRootSignatureBlob-&gt;GetBufferPointer(),
+		    pRootSignatureBlob-&gt;GetBufferSize(),
+		    IID_PPV_ARGS(&amp;deserializer));
+		
+		const D3D12_ROOT_SIGNATURE_DESC* desc = deserializer-&gt;GetRootSignatureDesc();
+    }
+}
+</code></pre></div></div>
+
+<h1 id="셰이더-작성">셰이더 작성</h1>
+<p>https://github.com/microsoft/DirectXShaderCompiler/blob/main/tools/clang/lib/Sema/SemaHLSL.cpp<br>
+타입에 관해서는  ArBasicKind values 참조</p>
+
+<p>https://github.com/microsoft/DirectXShaderCompiler/blob/main/tools/clang/include/clang/Basic/Attr.td<br>
+어트리뷰트에 관해서는 HLSL Change - HLSL Change End 구간 참조</p>
+
+<h4 id="subobjectkind">SubobjectKind</h4>
+<p><a href="/Public/Study/Graphics/Docs/DirectX12/Work%20Graphs" target="_blank">Work Graphs</a><br>
+셰이더 모델 6.3부터는 서브 오브젝트를 HLSL 코드 내에서 직접 정의할 수 있습니다</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>    "StateObjectConfig", // D3D12_STATE_OBJECT_CONFIG
+    "GlobalRootSignature", // D3D12_GLOBAL_ROOT_SIGNATURE
+    "LocalRootSignature",  // D3D12_LOCAL_ROOT_SIGNATURE
+    "SubobjectToExportsAssociation", // D3D12_DXIL_SUBOBJECT_TO_EXPORTS_ASSOCIATION
+    "RaytracingShaderConfig", // RaytracingShaderConfig
+    "RaytracingPipelineConfig", // D3D12_RAYTRACING_PIPELINE_CONFIG
+    
+    // D3D12_HIT_GROUP_DESC ,Type 필드가 D3D12_HIT_GROUP_TYPE_TRIANGLES
+    "TriangleHitGroup", 
+    
+    // D3D12_HIT_GROUP_DESC ,Type 필드가 D3D12_HIT_GROUP_TYPE_PROCEDURAL_PRIMITIVE
+    "ProceduralPrimitiveHitGroup",
+    "RaytracingPipelineConfig1", // D3D12_RAYTRACING_PIPELINE_CONFIG1 
+</code></pre></div></div>
+
+<h2 id="1hlsl-control-flow-attributes">1.HLSL Control Flow Attributes</h2>
+
+<h6 id="branch-flatten">branch, flatten</h6>
+<p><a href="/Public/Study/%EC%BB%B4%ED%93%A8%ED%84%B0%20%EA%B5%AC%EC%A1%B0/Docs/GPU/GPU%20%EA%B5%AC%EC%A1%B0" target="_blank">GPU 구조</a><br>
+분기 시 각 Path를 실행하는데 레인 활성화가 순차적으로 진행되기 때문에, 실행 시간이 길어짐으로<br>
+컴파일는 이를 최적화하여 워프가 모든 Path를 계산하고 조건에 따른 값을 선택하도록 Flatten 이 일어날 수 있다.</p>
+
+<p>어트리뷰트를 작성함으로서 컴파일러에게 최적화 힌트를 제공한다.</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>// if / switch 위에 작성
+[branch]
+[flatten]
+</code></pre></div></div>
+
+<h6 id="unroll--loop">unroll , loop</h6>
+<p>반복문의 경우 반복 횟수 만큼 <br>
+종료 조건 비교, 회수 증가 연산, 명령어 점프를 수행해야한다.</p>
+
+<p>컴파일러는 반복문을 최적화하여</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[unroll]
+for (int i = 0; i &lt; 4; i++) 
+{
+	Execute()
+}
+</code></pre></div></div>
+<p>아래와 같이 풀어낸다.</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Execute(1)
+Execute(2)
+Execute(3)
+Execute(4)
+</code></pre></div></div>
+
+<p>실행 속도는 더 빠르지만, 명령 자체의 개수는 증가하였다.<br>
+만약 수만 번의 반복할 경우에는 풀어내면 명령어 개수가 그만큼 증가함으로<br>
+명령어 캐시를 넘어서게 된다. 그러한 경우에는 loop 힌트를 준다.</p>
+
+<h6 id="forcecase">forcecase</h6>
+<p>switch 문의 경우, 컴파일러는 if else 문으로 해석하기도 하고<br>
+점프 테이블을 만들어 조건 비교를 위한 명령어 낭비를 최소화 하고 바로 실행할 수 있게 한다.</p>
+
+<h6 id="call">call</h6>
+<p>Switch 문이 최적화 되면서 실행되지 않을 분기의 변수들까지 모두 레지스터를 할당해야 함으로 낭비가 생긴다.<br>
+이 어트리뷰트를 사용하면 각 case 들을 서브루틴으로 만든다. 서브 루틴을 만듦으로서 분기의 손해를 감수하고, <br>
+명령어 최적화에 제약을 걸어 할당에 필요한 레지스터를 줄인다.</p>
+
+<h6 id="fastopt">fastopt</h6>
+<p>과도한 최적화 시뮬레이션을 하지 않고 빠르게 컴파일을 요구한다.</p>
+
+<h6 id="allow_uav_condition">allow_uav_condition</h6>
+<p>UAV의 경우,  다른 워프가 종료 조건을 write 해야 하지만 현재 루프를 도는 워프로 인해<br>
+스케줄링 되지 않는 경우 무한 루프의 위험이 있다. 따라서 hlsl에서 루프 종료 조건에 UAV에서 읽은 데이터를 사용하면 컴파일 오류를 낸다. 이를 끌 수 있는 어트리뷰트다.</p>
+
+<h2 id="2hlsl-function-attributes">2.HLSL Function Attributes</h2>
+<h3 id="21-셰이더-진입점-및-단계-제어-shader-stages--entry-points">2.1 셰이더 진입점 및 단계 제어 (Shader Stages &amp; Entry Points)</h3>
+<h6 id="shader">Shader</h6>
+<p>진입점을 가리키기 위해  함수 위에 작성합니다.</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[shader("Pixel")]
+[shader("Vertex")]
+[shader("Geometry")]
+[shader("Hull")]
+[shader("Domain")]
+[shader("Compute")]
+[shader("RayGeneration")]
+[shader("Intersection")]
+[shader("AnyHit")]
+[shader("ClosestHit")]
+[shader("Miss")]
+[shader("Callable")]
+[shader("Mesh")]
+[shader("Amplification")]
+[shader("Node")]
+</code></pre></div></div>
+<h6 id="earlydepthstencil">earlydepthstencil</h6>
+<p>픽셀 셰이더 함수 위에 작성하며 Early-Z 를 강제로 수행하는 일을 한다.</p>
+
+<p>Z write On 상태에서 Early-Z 의 경우 픽셀 셰이더 에서 깊이 값을 수정하거나 clip, discard를 호출하면<br>
+존재하지도 않는 픽셀의 z값이 z 버퍼에 채워질 수 있음으로 하드웨어에 의해 기능이 꺼지게 된다.</p>
+
+<p>픽셀 셰이어에 UAV 버퍼에 값을 쓰는 코드가 있으면 깊이 테스트 결과와 무관하게 실행되어야 한다고 <br>
+판단됨으로 하드웨어에 의해 Early-Z  기능이 꺼지게 된다.</p>
+
+<h6 id="clipplanes">clipplanes</h6>
+<p>버텍스 셰이더 함수 위에 작성하며 <br>
+컴파일러가 셰이더 코드 끝에 정점 위치와 클립 평면 간의 거리 계산 코드를 추가한다. <br>
+평면 외부의 정점들에 대해서 클리핑 단계가 수행된다.</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>cbuffer ClipPlaneBuffer : register(b0) 
+{ 
+	float4 g_ClipPlane0; 
+	float4 g_ClipPlane1; 
+};
+
+//최대 6개 까지의 평면을 제공할 수 있다.
+[clipplanes(g_ClipPlane0,g_ClipPlane1, ...)]
+</code></pre></div></div>
+
+<p>현대적인 방법으로는 float4 출력값 에 대해 SV_ClipDistance0, SV_ClipDistance1 시멘틱을 <br>
+사용해 최대 8개의 평면과의 거리를 직접 계산해 넘겨주는 방법이 있다.</p>
+
+<h6 id="numthreads">numthreads</h6>
+<p>메시 셰이더나 컴퓨트 셰이더 함수 위에 작성.<br>
+연산을 수행할 스레드 개수를 지정한다.</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[numthreads(X, Y, Z)]
+</code></pre></div></div>
+<h6 id="groupsharedlimit">GroupSharedLimit</h6>
+<p>메시 셰이더나 컴퓨트 셰이더 함수 위에 작성.</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[GroupSharedLimit(&lt;bytes&gt;)]
+</code></pre></div></div>
+<p>사용 가능한 공유 메모리를 명시함</p>
+
+<h6 id="wavesize">wavesize</h6>
+<p>numthreads를 실행할 때 <br>
+Warp 또는 Wave 라고 부르는 실제 집행 단위를 요청한다.</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[wavesize(Min, Max, Preferred)]
+</code></pre></div></div>
+<h6 id="waveopsincludehelperlanes">waveopsincludehelperlanes</h6>
+<p>픽셀 셰이더 위에 선언된다.<br>
+<a href="/Public/Study/Graphics/Docs/DirectX12/Rasterizer" target="_blank">Rasterizer</a></p>
+
+<p>웨이브 명령어는 활성화된 스레드가 실행하는 코드이다. <br>
+가상 픽셀을 수행하는 셰이더의 경우 웨이브 연산에 빠지게 되는데<br>
+이때 같이 수행되도록 한다.</p>
+
+<h6 id="rootsignature">RootSignature</h6>
+<p>진입점 함수 위에 작성한다.</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[RootSignature(...)]
+</code></pre></div></div>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>RootFlags( FLAG1 | FLAG2 | ... )
+CBV/SRV/UAV(레지스터, [space, visibility])
+RootConstants(num32BitConstants = 값_개수, b레지스터, [space, visibility])
+DescriptorTable(범위1, 범위2, ... , [visibility] )
+StaticSampler( sReg, [filter, addressU, addressV, addressW , mipLODBias, maxAnisotropy , comparisonFunc, borderColor, minLOD, maxLOD,space, visibility])
+
+DescriptorTable( Range1, Range2, ... , [visibility] )
+
+#### Range
+CBV( bReg, [ numDescriptors, space, offset, flags ] )
+SRV( tReg, [ numDescriptors, space, offset, flags] )
+UAV( uReg, [ numDescriptors, space, offset, flags] )
+Sampler(sReg, [ numDescriptors, space, offset] )
+</code></pre></div></div>
+<h6 id="export">export</h6>
+<p>함수 정의 앞에 붙여 선언한다.<br>
+라이브러리로 셰이더 파일을 컴파일 하는 경우, 외부에서 호출 가능한<br>
+공개용 API 함수를 제공하는 역할이다.</p>
+
+<h3 id="22-매개변수-한정자-및-데이터-전달-parameters--data-flow">2.2 매개변수 한정자 및 데이터 전달 (Parameters &amp; Data Flow)</h3>
+
+<h6 id="in">in</h6>
+<p>매개 변수 타입 앞에 선언<br>
+내부에서 값을 변경하더라도 함수가 끝난 뒤 호출부의 원래 변수 값은 변하지 않습니다.</p>
+
+<h6 id="out">out</h6>
+<p>매개 변수 타입 앞에 선언<br>
+결과를 밖으로 꺼내기 위한 용도.<br>
+함수가 시작될 때 변수 안의 이전 값은 무시되므로 내부에서 값을 할당해야한다.</p>
+
+<h6 id="inout">inout</h6>
+<p>매개 변수 타입 앞에 선언<br>
+원래 변수가 가진 값을 함수 내부로 가져와서 사용하고, 함수 내부에서 값을 수정한 뒤 그 결과물을 다시 호출부의 변수로 되돌려줍니다</p>
+
+<h6 id="verticesprimitivesindices">vertices, primitives, indices</h6>
+<p>메시 셰이더는 vertices, primitives(opt), indices 정보를 담은 구조체를 인자로 보내야한다.<br>
+이때 출력 종류를 나타내기 위해 사용한다.</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[out] [vertices / primitives / indices ]  [데이터 타입] [변수명] [최대 개수 배열]
+</code></pre></div></div>
+
+<h6 id="outputtopology">outputtopology</h6>
+<p>메시 진입점 코드 위에 작성한다.</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[outputtopology(line)]
+[outputtopology(triangle)]
+</code></pre></div></div>
+<p>토폴로지를 지정한다.</p>
+
+<h6 id="raypayload">raypayload</h6>
+<p>DXR 파이프라인에서 입력 구조체 정의부에 선언한다.</p>
+
+<p>액세스 한정자를 도입해 셰이더 마다 접근 할 데이터를 레지스터 최적화한다.</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>struct [raypayload] MyPayload 
+{
+    // color는 ClosestHit, Miss가 쓰고, 호출자가 읽습니다.
+    float4 color  : read(caller) : write(closesthit, miss);
+};
+</code></pre></div></div>
+
+<h3 id="23-매개변수-보간-방식-interpolation-qualifiers">2.3 매개변수 보간 방식 (Interpolation Qualifiers)</h3>
+<p>픽셀 셰이더의 입력 변수 앞에 선언하여 래스터 라이저의 보간 방식을 정의한다.<br>
+기본 적으로 linear이다.</p>
+
+<h6 id="linear">linear</h6>
+<p>원근 보정 선형 보간을 수행한다.</p>
+<h6 id="noperspective">noperspective</h6>
+<p>원근 보정을 적용하지 않고 화면 공간에서 선형 보간을 수행한다.</p>
+<h6 id="nointerpolation">nointerpolation</h6>
+<p>보간을 수행하지 않고 첫 번째 정점이 대표하는 값을 그대로 적용한다.</p>
+<h6 id="centroid">centroid</h6>
+<p>MSAA 에서 활성화된 커버리지 샘플 중 하나를 선택해 보간을 수행한다.</p>
+<h6 id="center">center</h6>
+<p>MSAA 에서 픽셀 중심 위치를 기준으로 보간을 수행한다.</p>
+<h6 id="sample">sample</h6>
+<p>MSAA 에서 활성화된 커버리지 샘플 마다 보간을 수행한다.</p>
+
+<h3 id="24-변수-저장소-정밀도-및-배치-storage-precision--memory-layout">2.4 변수 저장소, 정밀도 및 배치 (Storage, Precision &amp; Memory Layout)</h3>
+<h6 id="precise">precise</h6>
+<p>변수 앞에 선언한다.<br>
+부동 소수점 반올림 오차로 인해 계산 순서에 따라 결과가 달라진다.<br>
+따라서 변수에 값을 저장하는 연산 단계에 대해 최적화 및 순서 재배치를 막는다.</p>
+<h6 id="column_majorrow_major">column_major / row_major</h6>
+<p>행렬 자료형인 float4x4 타입 앞에 선언한다.</p>
+<h6 id="unormsnorm">unorm / snorm</h6>
+<p>float 타입 앞에 선언한다.</p>
+
+<p>1바이트를 사용하여 255 정수 데이터를 <br>
+unorm은 0~1,  snorm은 -1 ~ 1 값으로 <br>
+Vram에 압축하여 저장하거나 압축을 해제 하여 읽는다.</p>
+
+<h6 id="groupshared">groupshared</h6>
+<p>동일한 스레드 그룹에 속한 워프들이 공유할 변수 앞에 선언한다.</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>// groupshared 변수의 쓰기가 완료될때가지 대기하고 완료된 워프는 스케줄링 대기열에서 제외
+// 동일한 그룹의 모든 워프가 장벽에 도달시 대기 해제 신호를 보내 스케줄링되도록 한다. 
+Barrier(GROUP_SHARED_MEMORY, GROUP_SCOPE | GROUP_SYNC)
+</code></pre></div></div>
+
+<h6 id="globallycoherent">globallycoherent</h6>
+<p>UAV 리소스 앞에 선언한다.</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>// globallycoherent 리소스의 쓰기가 완료될때가지 대기하고 
+// 완료된 워프는 스케줄링 대기열에서 제외
+// 동일한 그룹의 모든 워프가 장벽에 도달시 대기 해제 신호를 보내 스케줄링되도록 한다. 
+Barrier(UAV_MEMORY, DEVICE_SCOPE | GROUP_SYNC)
+</code></pre></div></div>
+
+<p>어떤 SM이 리소스에 접근할지 모르기 때문에 전역 SM 으로 플러시가 일어난다.</p>
+
+<h6 id="reordercoherent">reordercoherent</h6>
+<p>UAV 리소스 앞에 선언한다.</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>// reordercoherent 변수의 쓰기가 완료될때가지 대기하고 완료된 워프는 스케줄링 대기열에서 제외 
+// 동일한 그룹의 모든 워프가 장벽에 도달시 대기 해제 신호를 보내 스케줄링되도록 한다.  
+Barrier(UAV_MEMORY, REORDER_SCOPE | GROUP_SYNC)
+</code></pre></div></div>
+<p>DXR에서 충돌체에 따라 실행 코드가 분기 되는데 이때 각 노드들로 스레드 그룹이 재정렬 되어 <br>
+실행된다. 이때 어떤 SM으로 이동되는지 알고 있음으로 해당하는 SM 들 에게만 플러시가 일어난다.</p>
+
+<h3 id="25-work-graphs--node-shader-제어-작업-그래프">2.5 Work Graphs / Node Shader 제어 (작업 그래프)</h3>
+
+<h6 id="nodelaunch">nodelaunch</h6>
+<p>노드의 진입점 함수 위에 선언한다.</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[NodeLaunch("thread")] // 레코드 당 스레드가 실행된다.
+void MyBroadNode(ThreadNodeInputRecord&lt;MyData&gt; input) 
+{ 
+	// 스레드 전체가 이 하나의 레코드 데이터를 공유해서 읽습니다. 
+	MyData data = input.Get(); 
+}
+
+[NodeLaunch("broadcasting")] // 레코드당 스레드 그룹이 실행된다
+[NodeDispatchGrid(16, 1, 1)]  // 생성할 그룹 개수를 정의
+[numthreads(8, 8, 1)] // 스래드 그룹당 스레드 개수 정의
+void MyBroadNode(DispatchNodeInputRecord&lt;MyData&gt; input) 
+{ 
+	// 그룹 전체가 이 하나의 레코드 데이터를 공유해서 읽습니다. 
+	MyData data = input.Get(); 
+}
+
+[NodeLaunch("mesh")]
+[outputtopology("triangle")]
+[NodeDispatchGrid(16, 1, 1)]  // 생성할 그룹 개수를 정의
+[numthreads(8, 8, 1)] // 스래드 그룹당 스레드 개수 정의
+void MyMeshNode( 
+	DispatchNodeInputRecord&lt;MyData&gt; input, 
+	out vertices MyDataVert verts[64], 
+	out primitives MyDataPrim prim[64], 
+	out indices uint3 MyDataidx[64])
+{ 	
+	MyData record = input.Get();
+	SetMeshOutputCounts(uint numVertices, uint numPrimitives);
+	if (localID &lt; record.numVertices) 
+	{ 
+		
+	}
+	if (localID &lt; record.numPrimitives) 
+	{ 
+		
+	}
+}
+
+[numthreads(64, 1, 1)]
+[NodeLaunch("coalescing")] // 스케줄러가 레코드를 적절히 쌓은 뒤 스레드 그룹 하나를 실행한다.
+void MyCoalesceNode([MaxRecords(32)] GroupNodeInputRecords&lt;MyData&gt; inputs) 
+{ 
+	uint recordCount = inputs.Count(); 
+	if (localID &lt; recordCount) 
+	{ 
+		MyData record = inputs[localID]; 
+	}
+}
+</code></pre></div></div>
+<h6 id="nodeisprogramentry">nodeisprogramentry</h6>
+<p>워크 그래프의 최초 프로그램 진입점 함수 위에 선언한다.</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[NodeIsProgramEntry]
+</code></pre></div></div>
+<h6 id="nodeid">nodeid</h6>
+<p>// 진입점 함수 위에 선언한다.</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[NodeID("노드이름")]
+[NodeID("노드이름", 배열인덱스)]
+</code></pre></div></div>
+<p>노드의 출력 변수들에, 출력 노드의 ID를 사용함으로서 노드의 연결을 나타낸다. <br>
+워크 그래프는 서로 다른 셰이더 코드를 실행해야할때 분기가 아닌, 재 정렬을 선택해<br>
+성능을 높인다. 서로 다른 노드는 같은 이름 다른 인덱스로 묶여 출력으로 지정될 수 있다.</p>
+
+<h6 id="nodelocalrootargumentstableindex">nodelocalrootargumentstableindex</h6>
+<p>진입점 함수 위에 작성한다.</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[NodeLocalRootArgumentsTableIndex(상수)]
+</code></pre></div></div>
+<p>로컬 루트파라미터 테이블의 인덱스를 명시한다.</p>
+
+<h6 id="nodeshareinputof">nodeshareinputof</h6>
+<p>진입점 함수 위에 작성한다.</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[NodeShareInputOf(Node ID)]
+</code></pre></div></div>
+
+<p>노드가 출력 매개 변수로 따로 명시하지 않아도 <br>
+Node ID로의 출력 레코드에 대해 자신도 실행된다.</p>
+
+<h6 id="nodedispatchgrid">nodedispatchgrid </h6>
+<p>노드 진입점 위에 선언한다.</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[NodeDispatchGrid(x, y, z)]
+</code></pre></div></div>
+<p>노드가 실행될 때 실행할 스레드 그룹의 개수를 지정한다.</p>
+
+<h6 id="nodemaxdispatchgrid">nodemaxdispatchgrid</h6>
+<p>노드 진입점 위에 선언한다.</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>struct MyData 
+{ 
+	uint3 GridSize : SV_DispatchGrid;
+};
+
+[NodeMaxDispatchGrid(x, y, z)]
+</code></pre></div></div>
+<p>입력 데이터로 동적으로 읽어와 스레드 그룹을 생성할 때, 최대 한도를 지정한다.</p>
+
+<h6 id="nodemaxrecursiondepth">nodemaxrecursiondepth</h6>
+<p>재귀적으로 자기 자신을 다시 호출하는 노드 함수에 선언한다.</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>// 노드의 최대 실행 길이는 32로 제한된다.
+[NodeMaxRecursionDepth(N)]
+</code></pre></div></div>
+<p>워크 그래프에서 노드 간의 상호 재귀는 불가하지만<br>
+예외적으로 자기 자신을 호출하는 것은 가능하다.</p>
+
+<h6 id="nodetrackrwinputsharing">nodetrackrwinputsharing</h6>
+<p>입력 레코드 구조체의 정의부에 선언한다.</p>
+
+<p>구조체에 스레드 그룹의 작업을 추적하기 위한 4바이트의 원자적 카운터가 추가 된다.</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>RWDispatchNodeInputRecord&lt;T&gt; inputRecord // RW가 붙은 Input Record 를 입력 받는다.
+
+if (inputRecord.FinishedCrossGroupSharing()) 
+{ 
+	각 스레드 그룹의 대표 스레드가 이 값을 1 씩 올리고
+	마지막으로 1을 올린 스레드 그룹은 True 가 된다 
+}
+</code></pre></div></div>
+<p>동일한 스레드 그룹의 작업은 배리어로 동기화 할 수 있다.</p>
+
+<h1 id="3-hlsl-parameter-attributes-매개변수-속성">3. HLSL Parameter Attributes (매개변수 속성)</h1>
+<h6 id="maxrecords">MaxRecords</h6>
+<p>Coalescing 노드에서 입력 레코드 매개변수 바로 앞에 선언 하여<br>
+최대로 모일 수 있는 레코드를 지정하거나 출력  매개변수 앞에 붙여 <br>
+최대 몇 개의 레코드를 내보낼지 지정한다.</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[MaxRecords(상수)]
+</code></pre></div></div>
+<h6 id="maxrecordssharedwith">maxrecordssharedwith</h6>
+<p>출력 인자 앞에 선언한다.</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[Shader("node")] 
+void MyNode( 
+[MaxRecords(상수)] NodeOutput&lt;MyData&gt; outRecordA, 
+[MaxRecordsSharedWith(outRecordA)] NodeOutput&lt;MyData&gt; outRecordB)
+</code></pre></div></div>
+<p>출력 인자에 해당하는 레코드 메모리를 공유하여 사용한다.</p>
+
+<h6 id="allowsparsenodes">allowsparsenodes</h6>
+<p>출력 인자에 선언한다.</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[AllowSparseNodes]
+</code></pre></div></div>
+<p>연결될 노드가 존재하지 않더라도 D3D12 런타임이 파이프라인 컴파일 에러를 내지 않게 한다.</p>
+<h6 id="nodearraysize">NodeArraySize</h6>
+<p>NodeOutputArray 출력 매개변수 앞에 선언한다.</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[Shader("node")] void MyNode( 
+[MaxRecords(64)] [NodeArraySize(3)] NodeOutputArray&lt;MyData&gt; shader )
+</code></pre></div></div>
+<p>타겟 노드 배열의 크기를 지정한다.</p>
+
+<h6 id="unboundedsparsenodes">unboundedsparsenodes</h6>
+<p>출력 노드 배열에 선언한다.</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[UnboundedSparseNodes]
+</code></pre></div></div>
+<p>D3D12 런타임이 실제 연결 상태를 스캔하여 NodeArraySize를 알아서 계산한다.<br>
+연결될 노드가 존재하지 않더라도 컴파일 에러를 내지 않게 한다.</p>
+
+    </content>
+
+    <side style="font-size: 0.9em">
+      <h3 style="margin-bottom: 1em">Notes mentioning this note</h3>
+      
+      <div style="display: grid; grid-gap: 1em; grid-template-columns: repeat(1fr);">
+      
+        <div class="backlink-box">
+        <a class="internal-link" href="/Public/Study/Graphics/Docs/DirectX12/PSO(Pipeline%20State%20Object)">Pso(pipeline state object)</a><br>
+        <div style="font-size: 0.9em">PSO는 셰이더 코드와 파이프라인 설정을 하나로 묶어, 드라이버가 GPU에서 실행할 수 있는 
+네이티브 명령어와 상태”로 미리 변환해둔 객체
+</div>
+        </div>
+      
+        <div class="backlink-box">
+        <a class="internal-link" href="/Public/Study/Graphics/Docs/DirectX12/Resource%20Binding">Resource binding</a><br>
+        <div style="font-size: 0.9em">셰이더는 GPU 내에서 돌아가는 프로그램이다. 안전성과 보안 그리고 하드웨어 성능 최적화를 이유로, GPU 가상 주소에 대한 포인터 연산이나 역참조를 허용하지...</div>
+        </div>
+      
+        <div class="backlink-box">
+        <a class="internal-link" href="/Public/Study/Graphics/Docs/DirectX12/Work%20Graphs">Work graphs</a><br>
+        <div style="font-size: 0.9em">GPU의 커맨드 프로세서(Command Processor, CP)는 단순히 
+CPU가 넘긴 커맨드 리스트라는 작업 지시서를 선형적으로 작업을 수행한다.
+</div>
+        </div>
+      
+        <div class="backlink-box">
+        <a class="internal-link" href="/Public/Study/Graphics/Keyword">Keyword</a><br>
+        <div style="font-size: 0.9em">Graphics
+Graphics PipeLine
+Order-Independent Transparency
+Rendering Quation
+Camera
+</div>
+        </div>
+      
+      </div>
+      
+    </side>
+  </div>
+</article>
+
+<hr>
+<style>
+  .links line {
+    stroke: #ccc;
+    opacity: 0.5;
+  }
+
+  .nodes circle {
+    cursor: pointer;
+    fill: #8b88e6;
+    transition: all 0.15s ease-out;
+  }
+
+  .text text {
+    cursor: pointer;
+    fill: #333;
+    text-shadow: -1px -1px 0 #fafafabb, 1px -1px 0 #fafafabb, -1px 1px 0 #fafafabb, 1px 1px 0 #fafafabb;
+  }
+
+  .nodes [active],
+  .text [active] {
+    cursor: pointer;
+    fill: black;
+  }
+
+  .inactive {
+    opacity: 0.1;
+    transition: all 0.15s ease-out;
+  }
+
+  #graph-wrapper {
+    background: #fcfcfc;
+    border-radius: 4px;
+    height: auto;
+  }
+  
+  #graph-wrapper > svg {
+    max-width: 100%;
+    display: block;
+  }
+</style>
+
+<div id="graph-wrapper">
+  <script>
+    window.addEventListener("load", loadGraph);
+
+    function loadGraph() {
+      var oScript = document.createElement("script");
+      oScript.src = "https://cdnjs.cloudflare.com/ajax/libs/d3/5.16.0/d3.min.js";
+      oScript.crossOrigin = 'anonymous';
+      oScript.integrity =
+        "sha512-FHsFVKQ/T1KWJDGSbrUhTJyS1ph3eRrxI228ND0EGaEp6v4a/vGwPWd3Dtd/+9cI7ccofZvl/wulICEurHN1pg==";
+      document.body.appendChild(oScript);
+      oScript.onload = () => {
+        const MINIMAL_NODE_SIZE = 8;
+        const MAX_NODE_SIZE = 12;
+        const ACTIVE_RADIUS_FACTOR = 1.5;
+        const STROKE = 1;
+        const FONT_SIZE = 16;
+        const TICKS = 200;
+        const FONT_BASELINE = 40;
+        const MAX_LABEL_LENGTH = 50;
+
+        const graphData = {"edges":[{"source":"23618216923514314032234178128236130172","target":"72111109101"},{"source":"75101121119111114100","target":"72111109101"},{"source":"65108105103110109101110116","target":"72111109101"},{"source":"67117114105111117115108121321141019911711411410511010332116101109112108971161013211297116116101114110","target":"72111109101"},{"source":"681011151051031103211297116116101114110323232112114111120121","target":"72111109101"},{"source":"76971099810097","target":"72111109101"},{"source":"831179811511610511611711610511111095102971051081171141019510511595110111116959711095101114114111114","target":"72111109101"},{"source":"23613816423516013623514715695235143153234184176237153148","target":"72111109101"},{"source":"861051141161179710895234179188951181169798108101","target":"72111109101"},{"source":"67111110115116101120112114","target":"72111109101"},{"source":"7811110112099101112116","target":"72111109101"},{"source":"831049711410110095112116114","target":"72111109101"},{"source":"841211121011001011024432116121112101110971091014432117115105110103","target":"72111109101"},{"source":"8511010511311710195112116114","target":"72111109101"},{"source":"23418117223715213223518212832235182132235166172","target":"72111109101"},{"source":"23517912823613615232237133156237148140235166191","target":"72111109101"},{"source":"23613816423516713623713818432237143172236157184237132176","target":"72111109101"},{"source":"2361571802351661329523417612823516617223418417695234183156236185153","target":"72111109101"},{"source":"2361621402361841612341761463223617618423616117632443223615417623618416123417614632236176184236161176","target":"72111109101"},{"source":"23713315623714814023516619132235179132236185173","target":"72111109101"},{"source":"23713315623714814023516619195237138185236136152237153148","target":"72111109101"},{"source":"75101121119111114100","target":"72111109101"},{"source":"679710910111497","target":"72111109101"},{"source":"66108101110100105110103","target":"72111109101"},{"source":"6711110910997110100","target":"72111109101"},{"source":"6851100495095114111111116951129711497109101116101114","target":"72111109101"},{"source":"681011121161049511511610111099105108","target":"72111109101"},{"source":"68120103105401001051141019911612032103114971041121059911532105110102114971151161141179911611711410141","target":"72111109101"},{"source":"69120101991171161013210511010010511410199116","target":"72111109101"},{"source":"7010111099101","target":"72111109101"},{"source":"771159797","target":"72111109101"},{"source":"8011511140112105112101108105110101321151169711610132111981061019911641","target":"72111109101"},{"source":"801051121011081051101013211511611410197109","target":"72111109101"},{"source":"8297115116101114105122101114","target":"72111109101"},{"source":"8297121321161149799105110103","target":"72111109101"},{"source":"8210111510510010111099121","target":"72111109101"},{"source":"82101115111117114991013298105110100105110103","target":"72111109101"},{"source":"8210111511111711499101","target":"72111109101"},{"source":"82101115111117114991019897114114105101114","target":"72111109101"},{"source":"8397109112108101114","target":"72111109101"},{"source":"8310497100101114","target":"72111109101"},{"source":"871111141073210311497112104115","target":"72111109101"},{"source":"71114971121041059911532112105112101108105110101","target":"72111109101"},{"source":"79114100101114327311010010111210111010010111011632116114971101151129711410111099121","target":"72111109101"},{"source":"821011101001011141051101033211311797116105111110","target":"72111109101"},{"source":"75101121119111114100","target":"72111109101"},{"source":"8010111410211111499101321041011081051203299111114101","target":"72111109101"},{"source":"80101114102111114991013223715214523615113332236139156235174172235160136236157180236133152","target":"72111109101"},{"source":"8052105103110111114101","target":"72111109101"},{"source":"75101121119111114100","target":"72111109101"},{"source":"674343323832236150184235166172236150188322361511482361671323223518514023514715632234179188236160149","target":"72111109101"},{"source":"6810099401001011141051181011003210097116973299979910410141","target":"72111109101"},{"source":"83111117114991013298117105108100","target":"72111109101"},{"source":"236132156235184140236139156236138164237133156","target":"72111109101"},{"source":"237131128236158133","target":"72111109101"},{"source":"75101121119111114100","target":"72111109101"},{"source":"75101121119111114100","target":"72111109101"},{"source":"6711211732234182140237149156","target":"72111109101"},{"source":"7111211732234181172236161176","target":"72111109101"},{"source":"861051141161179710832971001001141011151153211210412111510599971083297100100114101115115","target":"72111109101"},{"source":"236186144236139156","target":"72111109101"},{"source":"75101121119111114100","target":"72111109101"},{"source":"72111109101","target":"75101121119111114100"},{"source":"75101121119111114100","target":"65108105103110109101110116"},{"source":"236186144236139156","target":"65108105103110109101110116"},{"source":"75101121119111114100","target":"6711110911210510810195111112116"},{"source":"861051141161179710895234179188951181169798108101","target":"67117114105111117115108121321141019911711411410511010332116101109112108971161013211297116116101114110"},{"source":"75101121119111114100","target":"67117114105111117115108121321141019911711411410511010332116101109112108971161013211297116116101114110"},{"source":"681011151051031103211297116116101114110323232112114111120121","target":"6810111510510311032112971161161011141103232321001019911111497116111114"},{"source":"75101121119111114100","target":"6810111510510311032112971161161011141103232321001019911111497116111114"},{"source":"75101121119111114100","target":"681011151051031103211297116116101114110323232112114111120121"},{"source":"75101121119111114100","target":"691091121161219598971151019599108971151159511111211610510910512297116105111110"},{"source":"75101121119111114100","target":"76971099810097"},{"source":"75101121119111114100","target":"831179811511610511611711610511111095102971051081171141019510511595110111116959711095101114114111114"},{"source":"75101121119111114100","target":"67111110115116101120112114"},{"source":"75101121119111114100","target":"7811110112099101112116"},{"source":"8511010511311710195112116114","target":"831049711410110095112116114"},{"source":"75101121119111114100","target":"841211121011001011024432116121112101110971091014432117115105110103"},{"source":"23613816423516713623713818432237143172236157184237132176","target":"8511010511311710195112116114"},{"source":"831049711410110095112116114","target":"871019710795112116114"},{"source":"72111109101","target":"75101121119111114100"},{"source":"75101121119111114100","target":"679710910111497"},{"source":"8011511140112105112101108105110101321151169711610132111981061019911641","target":"66108101110100105110103"},{"source":"75101121119111114100","target":"66108101110100105110103"},{"source":"82101115111117114991013298105110100105110103","target":"671111171101161011143211410111511111711499101"},{"source":"75101121119111114100","target":"671111171101161011143211410111511111711499101"},{"source":"82101115111117114991013298105110100105110103","target":"6851100495095114111111116951129711497109101116101114"},{"source":"75101121119111114100","target":"6851100495095114111111116951129711497109101116101114"},{"source":"8011511140112105112101108105110101321151169711610132111981061019911641","target":"681011121161049511511610111099105108"},{"source":"75101121119111114100","target":"68120103105401001051141019911612032103114971041121059911532105110102114971151161141179911611711410141"},{"source":"82101115111117114991013298105110100105110103","target":"69120101991171161013210511010010511410199116"},{"source":"871111141073210311497112104115","target":"69120101991171161013210511010010511410199116"},{"source":"75101121119111114100","target":"69120101991171161013210511010010511410199116"},{"source":"6711110910997110100","target":"7010111099101"},{"source":"8011511140112105112101108105110101321151169711610132111981061019911641","target":"771159797"},{"source":"8297115116101114105122101114","target":"771159797"},{"source":"8210111511111711499101","target":"771159797"},{"source":"75101121119111114100","target":"771159797"},{"source":"75101121119111114100","target":"8011511140112105112101108105110101321151169711610132111981061019911641"},{"source":"8011511140112105112101108105110101321151169711610132111981061019911641","target":"801051121011081051101013211511611410197109"},{"source":"75101121119111114100","target":"801051121011081051101013211511611410197109"},{"source":"771159797","target":"8297115116101114105122101114"},{"source":"8011511140112105112101108105110101321151169711610132111981061019911641","target":"8297115116101114105122101114"},{"source":"8310497100101114","target":"8297115116101114105122101114"},{"source":"71114971121041059911532112105112101108105110101","target":"8297115116101114105122101114"},{"source":"75101121119111114100","target":"8297115116101114105122101114"},{"source":"75101121119111114100","target":"8297121321161149799105110103"},{"source":"8210111511111711499101","target":"8210111510510010111099121"},{"source":"75101121119111114100","target":"8210111510510010111099121"},{"source":"8011511140112105112101108105110101321151169711610132111981061019911641","target":"82101115111117114991013298105110100105110103"},{"source":"8210111511111711499101","target":"82101115111117114991013298105110100105110103"},{"source":"75101121119111114100","target":"82101115111117114991013298105110100105110103"},{"source":"8011511140112105112101108105110101321151169711610132111981061019911641","target":"8210111511111711499101"},{"source":"8397109112108101114","target":"8210111511111711499101"},{"source":"75101121119111114100","target":"8210111511111711499101"},{"source":"8210111511111711499101","target":"82101115111117114991019897114114105101114"},{"source":"75101121119111114100","target":"82101115111117114991019897114114105101114"},{"source":"8297115116101114105122101114","target":"8397109112108101114"},{"source":"82101115111117114991013298105110100105110103","target":"8397109112108101114"},{"source":"75101121119111114100","target":"8397109112108101114"},{"source":"8011511140112105112101108105110101321151169711610132111981061019911641","target":"8310497100101114"},{"source":"82101115111117114991013298105110100105110103","target":"8310497100101114"},{"source":"871111141073210311497112104115","target":"8310497100101114"},{"source":"75101121119111114100","target":"8310497100101114"},{"source":"8011511140112105112101108105110101321151169711610132111981061019911641","target":"871111141073210311497112104115"},{"source":"801051121011081051101013211511611410197109","target":"871111141073210311497112104115"},{"source":"8310497100101114","target":"871111141073210311497112104115"},{"source":"71114971121041059911532112105112101108105110101","target":"871111141073210311497112104115"},{"source":"75101121119111114100","target":"871111141073210311497112104115"},{"source":"871111141073210311497112104115","target":"71114971121041059911532112105112101108105110101"},{"source":"75101121119111114100","target":"71114971121041059911532112105112101108105110101"},{"source":"75101121119111114100","target":"79114100101114327311010010111210111010010111011632116114971101151129711410111099121"},{"source":"75101121119111114100","target":"821011101001011141051101033211311797116105111110"},{"source":"72111109101","target":"75101121119111114100"},{"source":"75101121119111114100","target":"8010111410211111499101321041011081051203299111114101"},{"source":"6810099401001011141051181011003210097116973299979910410141","target":"8010111410211111499101321041011081051203299111114101"},{"source":"75101121119111114100","target":"8052105103110111114101"},{"source":"72111109101","target":"75101121119111114100"},{"source":"75101121119111114100","target":"65117116111114116102109"},{"source":"674343323832236150184235166172236150188322361511482361671323223518514023514715632234179188236160149","target":"6810099401001011141051181011003210097116973299979910410141"},{"source":"75101121119111114100","target":"821041054011410111010010111432104971141001199711410132105110116101114102979910141"},{"source":"75101121119111114100","target":"70103101110101114105991121089711610211111410910997108108111999911497115104"},{"source":"75101121119111114100","target":"7610810940108111119321081011181011083210910110911111412141"},{"source":"75101121119111114100","target":"77101109111114121321161149799101"},{"source":"674343323832236150184235166172236150188322361511482361671323223518514023514715632234179188236160149","target":"83111117114991013298117105108100"},{"source":"75101121119111114100","target":"83111117114991013298117105108100"},{"source":"72111109101","target":"75101121119111114100"}],"nodes":[{"id":"72111109101","path":"/","label":"Home"},{"id":"2341791812341761323223615814423516314032234181172236161176","path":"/Public/Study/Algorithm/Docs/%EA%B3%B5%EA%B0%84%20%EC%9E%90%EB%A3%8C%20%EA%B5%AC%EC%A1%B0","label":"공간 자료 구조"},{"id":"236139156234176132322351791812361581612351431323223417918123417613232235179181236158161235143132","path":"/Public/Study/Algorithm/Docs/%EC%8B%9C%EA%B0%84%20%EB%B3%B5%EC%9E%A1%EB%8F%84%20%EA%B3%B5%EA%B0%84%20%EB%B3%B5%EC%9E%A1%EB%8F%84","label":"시간 복잡도 공간 복잡도"},{"id":"7110610740103105108981011141163274111104110115111110327510110111411610410541","path":"/Public/Study/Algorithm/Docs/%EC%B6%A9%EB%8F%8C%20%EA%B2%80%EC%82%AC%20%EC%95%8C%EA%B3%A0%EB%A6%AC%EC%A6%98/GJK(Gilbert-Johnson-Keerthi)","label":"Gjk(gilbert Johnson Keerthi)"},{"id":"839711640115101112971149711610511010332971201051153211610410111111410110941","path":"/Public/Study/Algorithm/Docs/%EC%B6%A9%EB%8F%8C%20%EA%B2%80%EC%82%AC%20%EC%95%8C%EA%B3%A0%EB%A6%AC%EC%A6%98/SAT(Separating%20Axis%20Theorem)","label":"Sat(separating axis theorem)"},{"id":"23618216923514314032234178128236130172","path":"/Public/Study/Algorithm/Docs/%EC%B6%A9%EB%8F%8C%20%EA%B2%80%EC%82%AC%20%EC%95%8C%EA%B3%A0%EB%A6%AC%EC%A6%98/%EC%B6%A9%EB%8F%8C%20%EA%B2%80%EC%82%AC","label":"충돌 검사"},{"id":"75101121119111114100","path":"/Public/Study/Algorithm/Keyword","label":"Keyword"},{"id":"65108105103110109101110116","path":"/Public/Study/C++/Docs/Alignment","label":"Alignment"},{"id":"6711110911210510810195111112116","path":"/Public/Study/C++/Docs/Compile_Opt","label":"Compile_opt"},{"id":"67117114105111117115108121321141019911711411410511010332116101109112108971161013211297116116101114110","path":"/Public/Study/C++/Docs/Curiously%20Recurring%20Template%20Pattern","label":"Curiously recurring template pattern"},{"id":"6810111510510311032112971161161011141103232321001019911111497116111114","path":"/Public/Study/C++/Docs/Design%20Pattern%20-%20Decorator","label":"Design pattern   decorator"},{"id":"681011151051031103211297116116101114110323232112114111120121","path":"/Public/Study/C++/Docs/Design%20Pattern%20-%20Proxy","label":"Design pattern   proxy"},{"id":"691091121161219598971151019599108971151159511111211610510910512297116105111110","path":"/Public/Study/C++/Docs/Empty_Base_Class_Optimization","label":"Empty_base_class_optimization"},{"id":"7011111411911497114100","path":"/Public/Study/C++/Docs/Forwrard","label":"Forwrard"},{"id":"76971099810097","path":"/Public/Study/C++/Docs/Lambda","label":"Lambda"},{"id":"771111181012361531289510211111411997114100","path":"/Public/Study/C++/Docs/Move%EC%99%80_Forward","label":"Move와_forward"},{"id":"831179811511610511611711610511111095102971051081171141019510511595110111116959711095101114114111114","path":"/Public/Study/C++/Docs/Substitution_Failure_Is_Not_An_Error","label":"Substitution_failure_is_not_an_error"},{"id":"23613816423516013623514715695235143153234184176237153148","path":"/Public/Study/C++/Docs/ThreadSync/%EC%8A%A4%EB%A0%88%EB%93%9C_%EB%8F%99%EA%B8%B0%ED%99%94","label":"스레드_동기화"},{"id":"861051141161179710895234179188951181169798108101","path":"/Public/Study/C++/Docs/Virtual_%EA%B3%BC_Vtable","label":"Virtual_과_vtable"},{"id":"67111110115116101120112114","path":"/Public/Study/C++/Docs/constexpr","label":"Constexpr"},{"id":"7811110112099101112116","path":"/Public/Study/C++/Docs/noexcept","label":"Noexcept"},{"id":"831049711410110095112116114","path":"/Public/Study/C++/Docs/shared_ptr","label":"Shared_ptr"},{"id":"841211121011001011024432116121112101110971091014432117115105110103","path":"/Public/Study/C++/Docs/typedef,%20typename,%20using","label":"Typedef, typename, using"},{"id":"8511010511311710195112116114","path":"/Public/Study/C++/Docs/unique_ptr","label":"Unique_ptr"},{"id":"871019710795112116114","path":"/Public/Study/C++/Docs/weak_ptr","label":"Weak_ptr"},{"id":"23418117223715213223518212832235182132235166172","path":"/Public/Study/C++/Docs/%EA%B5%AC%ED%98%84%EB%B6%80%20%EB%B6%84%EB%A6%AC","label":"구현부 분리"},{"id":"23516914823517016823516617232237149160235139185","path":"/Public/Study/C++/Docs/%EB%A9%94%EB%AA%A8%EB%A6%AC%20%ED%95%A0%EB%8B%B9","label":"메모리 할당"},{"id":"23517912823613615232237133156237148140235166191","path":"/Public/Study/C++/Docs/%EB%B3%80%EC%88%98%20%ED%85%9C%ED%94%8C%EB%A6%BF","label":"변수 템플릿"},{"id":"23518513223713818432236151176236130176","path":"/Public/Study/C++/Docs/%EB%B9%84%ED%8A%B8%20%EC%97%B0%EC%82%B0","label":"비트 연산"},{"id":"23613816423516713623713818432237143172236157184237132176","path":"/Public/Study/C++/Docs/%EC%8A%A4%EB%A7%88%ED%8A%B8%20%ED%8F%AC%EC%9D%B8%ED%84%B0","label":"스마트 포인터"},{"id":"2361571802351661329523417612823516617223418417695234183156236185153","path":"/Public/Study/C++/Docs/%EC%9D%B4%EB%A6%84_%EA%B0%80%EB%A6%AC%EA%B8%B0_%EA%B7%9C%EC%B9%99","label":"이름_가리기_규칙"},{"id":"2361621402361841612341761463223617618423616117632443223615417623618416123417614632236176184236161176","path":"/Public/Study/C++/Docs/%EC%A2%8C%EC%B8%A1%EA%B0%92%20%EC%B0%B8%EC%A1%B0%20,%20%EC%9A%B0%EC%B8%A1%EA%B0%92%20%EC%B0%B8%EC%A1%B0","label":"좌측값 참조 , 우측값 참조"},{"id":"23713315623714814023516619132235179132236185173","path":"/Public/Study/C++/Docs/%ED%85%9C%ED%94%8C%EB%A6%BF%20%EB%B3%84%EC%B9%AD","label":"템플릿 별칭"},{"id":"23713315623714814023516619195237138185236136152237153148","path":"/Public/Study/C++/Docs/%ED%85%9C%ED%94%8C%EB%A6%BF_%ED%8A%B9%EC%88%98%ED%99%94","label":"템플릿_특수화"},{"id":"75101121119111114100","path":"/Public/Study/C++/KeyWord","label":"Keyword"},{"id":"679710910111497","path":"/Public/Study/Graphics/Docs/Camera","label":"Camera"},{"id":"66108101110100105110103","path":"/Public/Study/Graphics/Docs/DirectX12/Blending","label":"Blending"},{"id":"6711110910997110100","path":"/Public/Study/Graphics/Docs/DirectX12/Command","label":"Command"},{"id":"671111171101161011143211410111511111711499101","path":"/Public/Study/Graphics/Docs/DirectX12/Counter%20Resource","label":"Counter resource"},{"id":"6851100495095114111111116951129711497109101116101114","path":"/Public/Study/Graphics/Docs/DirectX12/D3D12_ROOT_PARAMETER","label":"D3d12_root_parameter"},{"id":"681011121161049511511610111099105108","path":"/Public/Study/Graphics/Docs/DirectX12/DEPTH_STENCIL","label":"Depth_stencil"},{"id":"68120103105401001051141019911612032103114971041121059911532105110102114971151161141179911611711410141","path":"/Public/Study/Graphics/Docs/DirectX12/DXGI(DirectX%20Grahpics%20Infrastructure)","label":"Dxgi(directx grahpics infrastructure)"},{"id":"69120101991171161013210511010010511410199116","path":"/Public/Study/Graphics/Docs/DirectX12/Execute%20Indirect","label":"Execute indirect"},{"id":"7010111099101","path":"/Public/Study/Graphics/Docs/DirectX12/Fence","label":"Fence"},{"id":"771159797","path":"/Public/Study/Graphics/Docs/DirectX12/MSAA","label":"Msaa"},{"id":"8011511140112105112101108105110101321151169711610132111981061019911641","path":"/Public/Study/Graphics/Docs/DirectX12/PSO(Pipeline%20State%20Object)","label":"Pso(pipeline state object)"},{"id":"801051121011081051101013211511611410197109","path":"/Public/Study/Graphics/Docs/DirectX12/Pipeline%20Stream","label":"Pipeline stream"},{"id":"8297115116101114105122101114","path":"/Public/Study/Graphics/Docs/DirectX12/Rasterizer","label":"Rasterizer"},{"id":"8297121321161149799105110103","path":"/Public/Study/Graphics/Docs/DirectX12/Ray%20Tracing","label":"Ray tracing"},{"id":"8210111510510010111099121","path":"/Public/Study/Graphics/Docs/DirectX12/Residency","label":"Residency"},{"id":"82101115111117114991013298105110100105110103","path":"/Public/Study/Graphics/Docs/DirectX12/Resource%20Binding","label":"Resource binding"},{"id":"8210111511111711499101","path":"/Public/Study/Graphics/Docs/DirectX12/Resource","label":"Resource"},{"id":"82101115111117114991019897114114105101114","path":"/Public/Study/Graphics/Docs/DirectX12/ResourceBarrier","label":"Resourcebarrier"},{"id":"8397109112108101114","path":"/Public/Study/Graphics/Docs/DirectX12/Sampler","label":"Sampler"},{"id":"8310497100101114","path":"/Public/Study/Graphics/Docs/DirectX12/Shader","label":"Shader"},{"id":"871111141073210311497112104115","path":"/Public/Study/Graphics/Docs/DirectX12/Work%20Graphs","label":"Work graphs"},{"id":"71114971121041059911532112105112101108105110101","path":"/Public/Study/Graphics/Docs/Graphics%20PipeLine","label":"Graphics pipeline"},{"id":"79114100101114327311010010111210111010010111011632116114971101151129711410111099121","path":"/Public/Study/Graphics/Docs/Order-Independent%20Transparency","label":"Order Independent transparency"},{"id":"821011101001011141051101033211311797116105111110","path":"/Public/Study/Graphics/Docs/Rendering%20Quation","label":"Rendering quation"},{"id":"75101121119111114100","path":"/Public/Study/Graphics/Keyword","label":"Keyword"},{"id":"8010111410211111499101321041011081051203299111114101","path":"/Public/Study/Perforce/Docs/Perforce%20Helix%20Core","label":"Perforce helix core"},{"id":"80101114102111114991013223715214523615113332236139156235174172235160136236157180236133152","path":"/Public/Study/Perforce/Docs/Perforce%20%ED%98%91%EC%97%85%20%EC%8B%9C%EB%AE%AC%EB%A0%88%EC%9D%B4%EC%85%98/Perforce%20%ED%98%91%EC%97%85%20%EC%8B%9C%EB%AE%AC%EB%A0%88%EC%9D%B4%EC%85%98","label":"Perforce 협업 시뮬레이션"},{"id":"8052105103110111114101","path":"/Public/Study/Perforce/Docs/p4ignore","label":"P4ignore"},{"id":"85110105991111001013299108105101110116115321141011131171051141013297321171101059911110010132101110979810810110032115101114118101114","path":"/Public/Study/Perforce/Docs/%EB%AC%B8%EC%A0%9C%ED%95%B4%EA%B2%B0/Unicode%20clients%20require%20a%20unicode%20enabled%20server","label":"Unicode clients require a unicode enabled server"},{"id":"2371401402361571883223613615223616014923615718032235178136234177176235161173235139164","path":"/Public/Study/Perforce/Docs/%EB%AC%B8%EC%A0%9C%ED%95%B4%EA%B2%B0/%ED%8C%8C%EC%9D%BC%20%EC%88%98%EC%A0%95%EC%9D%B4%20%EB%B2%88%EA%B1%B0%EB%A1%AD%EB%8B%A4","label":"파일 수정이 번거롭다"},{"id":"75101121119111114100","path":"/Public/Study/Perforce/Keyword","label":"Keyword"},{"id":"65117116111114116102109","path":"/Public/Study/Unreal/Docs/AutoRTFM","label":"Autortfm"},{"id":"674343323832236150184235166172236150188322361511482361671323223518514023514715632234179188236160149","path":"/Public/Study/Unreal/Docs/C++%20&%20%EC%96%B8%EB%A6%AC%EC%96%BC%20%EC%97%94%EC%A7%84%20%EB%B9%8C%EB%93%9C%20%EA%B3%BC%EC%A0%95","label":"C++ & 언리얼 엔진 빌드 과정"},{"id":"6810099401001011141051181011003210097116973299979910410141","path":"/Public/Study/Unreal/Docs/DDC(Derived%20Data%20Cache)","label":"Ddc(derived data cache)"},{"id":"821041054011410111010010111432104971141001199711410132105110116101114102979910141","path":"/Public/Study/Unreal/Docs/Graphics/RHI(Render%20Hardware%20Interface)","label":"Rhi(render hardware interface)"},{"id":"70103101110101114105991121089711610211111410910997108108111999911497115104","path":"/Public/Study/Unreal/Docs/Memory/FGenericPlatformMallocCrash","label":"Fgenericplatformmalloccrash"},{"id":"7610810940108111119321081011181011083210910110911111412141","path":"/Public/Study/Unreal/Docs/Memory/LLM(Low%20Level%20Memory)","label":"Llm(low level memory)"},{"id":"77101109111114121321161149799101","path":"/Public/Study/Unreal/Docs/Memory/Memory%20Trace","label":"Memory trace"},{"id":"83111117114991013298117105108100","path":"/Public/Study/Unreal/Docs/Source%20Build/Source%20Build","label":"Source build"},{"id":"23417612823613112995234178189235161156","path":"/Public/Study/Unreal/Docs/%EA%B0%80%EC%83%81_%EA%B2%BD%EB%A1%9C","label":"가상_경로"},{"id":"236132156235184140236139156236138164237133156","path":"/Public/Study/Unreal/Docs/%EC%84%9C%EB%B8%8C%EC%8B%9C%EC%8A%A4%ED%85%9C","label":"서브시스템"},{"id":"23713112823417815923417918895235170168235147136952341831842351661722341791609511711211411110610199116","path":"/Public/Study/Unreal/Docs/%ED%83%80%EA%B2%9F%EA%B3%BC_%EB%AA%A8%EB%93%88_%EA%B7%B8%EB%A6%AC%EA%B3%A0_UProject","label":"타겟과_모듈_그리고_uproject"},{"id":"237131128236158133","path":"/Public/Study/Unreal/Docs/%ED%83%80%EC%9E%85","label":"타입"},{"id":"75101121119111114100","path":"/Public/Study/Unreal/Keyword","label":"Keyword"},{"id":"6511611611410598117116101","path":"/Public/Study/%EC%94%A8%EC%83%B5/Docs/Attribute","label":"Attribute"},{"id":"23417612823518513223616712832236187172235160137237132176","path":"/Public/Study/%EC%94%A8%EC%83%B5/Docs/%EA%B0%80%EB%B9%84%EC%A7%80%20%EC%BB%AC%EB%A0%89%ED%84%B0","label":"가비지 컬렉터"},{"id":"23615616023513913623713917632235159176237131128236158132","path":"/Public/Study/%EC%94%A8%EC%83%B5/Docs/%EC%9C%A0%EB%8B%88%ED%8B%B0%20%EB%9F%B0%ED%83%80%EC%9E%84","label":"유니티 런타임"},{"id":"75101121119111114100","path":"/Public/Study/%EC%94%A8%EC%83%B5/Keyword","label":"Keyword"},{"id":"6711211732234182140237149156","path":"/Public/Study/%EC%BB%B4%ED%93%A8%ED%84%B0%20%EA%B5%AC%EC%A1%B0/Docs/CPU%20%EA%B6%8C%ED%95%9C","label":"Cpu 권한"},{"id":"7111211732234181172236161176","path":"/Public/Study/%EC%BB%B4%ED%93%A8%ED%84%B0%20%EA%B5%AC%EC%A1%B0/Docs/GPU/GPU%20%EA%B5%AC%EC%A1%B0","label":"Gpu 구조"},{"id":"831051091004011510511010310810132105110115116114117991161051111103210911710811610511210810132100971169741","path":"/Public/Study/%EC%BB%B4%ED%93%A8%ED%84%B0%20%EA%B5%AC%EC%A1%B0/Docs/SIMD(Single%20Instruction%20Multiple%20Data)","label":"Simd(single instruction multiple data)"},{"id":"861051141161179710832971001001141011151153211210412111510599971083297100100114101115115","path":"/Public/Study/%EC%BB%B4%ED%93%A8%ED%84%B0%20%EA%B5%AC%EC%A1%B0/Docs/Virtual%20Address%20Physical%20Address","label":"Virtual address physical address"},{"id":"236186144236139156","path":"/Public/Study/%EC%BB%B4%ED%93%A8%ED%84%B0%20%EA%B5%AC%EC%A1%B0/Docs/%EC%BA%90%EC%8B%9C","label":"캐시"},{"id":"2371341812371491693223417612823613112932235169148235170168235166172","path":"/Public/Study/%EC%BB%B4%ED%93%A8%ED%84%B0%20%EA%B5%AC%EC%A1%B0/Docs/%ED%86%B5%ED%95%A9%20%EA%B0%80%EC%83%81%20%EB%A9%94%EB%AA%A8%EB%A6%AC","label":"통합 가상 메모리"},{"id":"75101121119111114100","path":"/Public/Study/%EC%BB%B4%ED%93%A8%ED%84%B0%20%EA%B5%AC%EC%A1%B0/Keyword","label":"Keyword"}]}
+        let nodesData = graphData.nodes;
+        let linksData = graphData.edges;
+
+        const nodeSize = {};
+
+        const updateNodeSize = () => {
+          nodesData.forEach((el) => {
+            let weight =
+              3 *
+              Math.sqrt(
+                linksData.filter((l) => l.source.id === el.id || l.target.id === el.id)
+                  .length + 1
+              );
+            if (weight < MINIMAL_NODE_SIZE) {
+              weight = MINIMAL_NODE_SIZE;
+            } else if (weight > MAX_NODE_SIZE) {
+              weight = MAX_NODE_SIZE;
+            }
+            nodeSize[el.id] = weight;
+          });
+        };
+
+        const onClick = (d) => {
+          window.location = d.path
+        };
+
+        const onMouseover = function (d) {
+          const relatedNodesSet = new Set();
+          linksData
+            .filter((n) => n.target.id == d.id || n.source.id == d.id)
+            .forEach((n) => {
+              relatedNodesSet.add(n.target.id);
+              relatedNodesSet.add(n.source.id);
+            });
+
+          node.attr("class", (node_d) => {
+            if (node_d.id !== d.id && !relatedNodesSet.has(node_d.id)) {
+              return "inactive";
+            }
+            return "";
+          });
+
+          link.attr("class", (link_d) => {
+            if (link_d.source.id !== d.id && link_d.target.id !== d.id) {
+              return "inactive";
+            }
+            return "";
+          });
+
+          link.attr("stroke-width", (link_d) => {
+            if (link_d.source.id === d.id || link_d.target.id === d.id) {
+              return STROKE * 4;
+            }
+            return STROKE;
+          });
+          text.attr("class", (text_d) => {
+            if (text_d.id !== d.id && !relatedNodesSet.has(text_d.id)) {
+              return "inactive";
+            }
+            return "";
+          });
+        };
+
+        const onMouseout = function (d) {
+          node.attr("class", "");
+          link.attr("class", "");
+          text.attr("class", "");
+          link.attr("stroke-width", STROKE);
+        };
+
+        const sameNodes = (previous, next) => {
+          if (next.length !== previous.length) {
+            return false;
+          }
+
+          const map = new Map();
+          for (const node of previous) {
+            map.set(node.id, node.label);
+          }
+
+          for (const node of next) {
+            const found = map.get(node.id);
+            if (!found || found !== node.title) {
+              return false;
+            }
+          }
+
+          return true;
+        };
+
+        const sameEdges = (previous, next) => {
+          if (next.length !== previous.length) {
+            return false;
+          }
+
+          const set = new Set();
+          for (const edge of previous) {
+            set.add(`${edge.source.id}-${edge.target.id}`);
+          }
+
+          for (const edge of next) {
+            if (!set.has(`${edge.source.id}-${edge.target.id}`)) {
+              return false;
+            }
+          }
+
+          return true;
+        };
+
+        const graphWrapper = document.getElementById('graph-wrapper')
+        const element = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        element.setAttribute("width", graphWrapper.getBoundingClientRect().width);
+        element.setAttribute("height", window.innerHeight * 0.8);
+        graphWrapper.appendChild(element);
+
+        const reportWindowSize = () => {
+          element.setAttribute("width", window.innerWidth);
+          element.setAttribute("height", window.innerHeight);
+        };
+
+        window.onresize = reportWindowSize;
+
+        const svg = d3.select("svg");
+        const width = Number(svg.attr("width"));
+        const height = Number(svg.attr("height"));
+        let zoomLevel = 1;
+
+        const simulation = d3
+          .forceSimulation(nodesData)
+          .force("forceX", d3.forceX().x(width / 2))
+          .force("forceY", d3.forceY().y(height / 2))
+          .force("charge", d3.forceManyBody())
+          .force(
+            "link",
+            d3
+              .forceLink(linksData)
+              .id((d) => d.id)
+              .distance(70)
+          )
+          .force("center", d3.forceCenter(width / 2, height / 2))
+          .force("collision", d3.forceCollide().radius(80))
+          .stop();
+
+        const g = svg.append("g");
+        let link = g.append("g").attr("class", "links").selectAll(".link");
+        let node = g.append("g").attr("class", "nodes").selectAll(".node");
+        let text = g.append("g").attr("class", "text").selectAll(".text");
+
+        const resize = () => {
+          if (d3.event) {
+            const scale = d3.event.transform;
+            zoomLevel = scale.k;
+            g.attr("transform", scale);
+          }
+
+          const zoomOrKeep = (value) => (zoomLevel >= 1 ? value / zoomLevel : value);
+
+          const font = Math.max(Math.round(zoomOrKeep(FONT_SIZE)), 1);
+
+          text.attr("font-size", (d) => font);
+          text.attr("y", (d) => d.y - zoomOrKeep(FONT_BASELINE) + 8);
+          link.attr("stroke-width", zoomOrKeep(STROKE));
+          node.attr("r", (d) => {
+            return zoomOrKeep(nodeSize[d.id]);
+          });
+          svg
+            .selectAll("circle")
+            .filter((_d, i, nodes) => d3.select(nodes[i]).attr("active"))
+            .attr("r", (d) => zoomOrKeep(ACTIVE_RADIUS_FACTOR * nodeSize[d.id]));
+        };
+
+        const ticked = () => {
+          node.attr("cx", (d) => d.x).attr("cy", (d) => d.y);
+          text
+            .attr("x", (d) => d.x)
+            .attr("y", (d) => d.y - (FONT_BASELINE - nodeSize[d.id]) / zoomLevel);
+          link
+            .attr("x1", (d) => d.source.x)
+            .attr("y1", (d) => d.source.y)
+            .attr("x2", (d) => d.target.x)
+            .attr("y2", (d) => d.target.y);
+        };
+
+        const restart = () => {
+          updateNodeSize();
+          node = node.data(nodesData, (d) => d.id);
+          node.exit().remove();
+          node = node
+            .enter()
+            .append("circle")
+            .attr("r", (d) => {
+              return nodeSize[d.id];
+            })
+            .on("click", onClick)
+            .on("mouseover", onMouseover)
+            .on("mouseout", onMouseout)
+            .merge(node);
+
+          link = link.data(linksData, (d) => `${d.source.id}-${d.target.id}`);
+          link.exit().remove();
+          link = link.enter().append("line").attr("stroke-width", STROKE).merge(link);
+
+          text = text.data(nodesData, (d) => d.label);
+          text.exit().remove();
+          text = text
+            .enter()
+            .append("text")
+            .text((d) => shorten(d.label.replace(/_*/g, ""), MAX_LABEL_LENGTH))
+            .attr("font-size", `${FONT_SIZE}px`)
+            .attr("text-anchor", "middle")
+            .attr("alignment-baseline", "central")
+            .on("click", onClick)
+            .on("mouseover", onMouseover)
+            .on("mouseout", onMouseout)
+            .merge(text);
+
+          node.attr("active", (d) => isCurrentPath(d.path) ? true : null);
+          text.attr("active", (d) => isCurrentPath(d.path) ? true : null);
+
+          simulation.nodes(nodesData);
+          simulation.force("link").links(linksData);
+          simulation.alpha(1).restart();
+          simulation.stop();
+
+          for (let i = 0; i < TICKS; i++) {
+            simulation.tick();
+          }
+
+          ticked();
+        };
+
+        const zoomHandler = d3.zoom().scaleExtent([0.2, 3]).on("zoom", resize);
+
+        zoomHandler(svg);
+        restart();
+
+        function isCurrentPath(notePath) {
+          return window.location.pathname.includes(notePath)
+        }
+
+        function shorten(str, maxLen, separator = ' ') {
+          if (str.length <= maxLen) return str;
+          return str.substr(0, str.lastIndexOf(separator, maxLen)) + '...';
+        }
+      }
+    }
+  </script>
+</div>
+
+</main>
+      <footer><a class="internal-link" href="/about">About Me</a>
+</footer>
+    </div>
+
+    <!-- That file is not particularly elegant. This will need a refactor at some point. -->
+<style>
+  content a.internal-link {
+    border-color: #8b88e6;
+    background-color: #efefff;
+  }
+
+  #tooltip-wrapper {
+    background: white;
+    padding: 1em;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    overflow: hidden;
+    position: absolute;
+    width: 400px;
+    height: 250px;
+    font-size: 0.8em;
+    box-shadow: 0 5px 10px rgba(0,0,0,0.1);
+    opacity: 0;
+    transition: opacity 100ms;
+  }
+
+  #tooltip-wrapper:after {
+		content: "";
+		position: absolute;
+		z-index: 1;
+		bottom: 0;
+		left: 0;
+		pointer-events: none;
+		background-image: linear-gradient(to bottom, rgba(255,255,255, 0), rgba(255,255,255, 1) 90%);
+		width: 100%;
+		height: 75px;
+  }
+</style>
+
+<div style="opacity: 0; display: none;" id='tooltip-wrapper'>
+  <div id='tooltip-content'>
+  </div>
+</div>
+
+<iframe style="display: none; height: 0; width: 0;" id='link-preview-iframe' src="">
+</iframe>
+
+<script>
+  var opacityTimeout;
+  var contentTimeout;
+  var transitionDurationMs = 100;
+
+  var iframe = document.getElementById('link-preview-iframe')
+  var tooltipWrapper = document.getElementById('tooltip-wrapper')
+  var tooltipContent = document.getElementById('tooltip-content')
+
+  var linkHistories = {};
+
+  function hideTooltip() {
+    opacityTimeout = setTimeout(function() {
+      tooltipWrapper.style.opacity = 0;
+      contentTimeout = setTimeout(function() {
+        tooltipContent.innerHTML = '';
+        tooltipWrapper.style.display = 'none';
+      }, transitionDurationMs + 1);
+    }, transitionDurationMs)
+  }
+
+  function showTooltip(event) {
+    var elem = event.target;
+    var elem_props = elem.getClientRects()[elem.getClientRects().length - 1];
+    var top = window.pageYOffset || document.documentElement.scrollTop
+
+    if (event.target.host === window.location.host) {
+      if (!linkHistories[event.target.href]) {
+        iframe.src = event.target.href
+        iframe.onload = function() {
+          tooltipContentHtml = ''
+          tooltipContentHtml += '<div style="font-weight: bold;">' + iframe.contentWindow.document.querySelector('h1').innerHTML + '</div>'
+          tooltipContentHtml += iframe.contentWindow.document.querySelector('content').innerHTML
+
+          tooltipContent.innerHTML = tooltipContentHtml
+          linkHistories[event.target.href] = tooltipContentHtml
+
+          tooltipWrapper.style.display = 'block';
+          setTimeout(function() {
+            tooltipWrapper.style.opacity = 1;
+          }, 1)
+        } 
+      } else {
+        tooltipContent.innerHTML = linkHistories[event.target.href]
+        tooltipWrapper.style.display = 'block';
+        setTimeout(function() {
+          tooltipWrapper.style.opacity = 1;
+        }, 1)
+      }
+
+
+      tooltipWrapper.style.left = elem_props.left - (tooltipWrapper.offsetWidth / 2) + (elem_props.width / 2) + "px";
+      if ((window.innerHeight - elem_props.top) < (tooltipWrapper.offsetHeight)) {
+          tooltipWrapper.style.top = elem_props.top + top - tooltipWrapper.offsetHeight - 10 + "px";
+      } else if ((window.innerHeight - elem_props.top) > (tooltipWrapper.offsetHeight)) {
+          tooltipWrapper.style.top = elem_props.top + top + 35 + "px";
+      }
+
+      if ((elem_props.left + (elem_props.width / 2)) < (tooltipWrapper.offsetWidth / 2)) {
+          tooltipWrapper.style.left = "10px";
+      } else if ((document.body.clientWidth - elem_props.left - (elem_props.width / 2)) < (tooltipWrapper.offsetWidth / 2)) {
+          tooltipWrapper.style.left = document.body.clientWidth - tooltipWrapper.offsetWidth - 20 + "px";
+      }
+    }
+  }
+
+  function setupListeners(linkElement) {
+    linkElement.addEventListener('mouseleave', function(_event) {
+      hideTooltip();
+    });
+
+    tooltipWrapper.addEventListener('mouseleave', function(_event) {
+      hideTooltip();
+    });
+
+    linkElement.addEventListener('touchend', function(_event) {
+      hideTooltip();
+    });
+
+    tooltipWrapper.addEventListener('touchend', function(_event) {
+      hideTooltip();
+    });
+
+    linkElement.addEventListener('mouseenter', function(event) {
+      clearTimeout(opacityTimeout);
+      clearTimeout(contentTimeout);
+      showTooltip(event);
+    });
+
+    tooltipWrapper.addEventListener('mouseenter', function(event) {
+      clearTimeout(opacityTimeout);
+      clearTimeout(contentTimeout);
+    });
+  }
+
+  document.querySelectorAll('content a').forEach(setupListeners);
+</script>
+
+  
+  
+  <!-- MathJax 설정 -->
+<script>
+  window.MathJax = {
+    tex: {
+      inlineMath: [['$', '$'], ['\\(', '\\)']],
+      displayMath: [['$$', '$$'], ['\\[', '\\]']],
+      processEscapes: true
+    },
+    options: {
+      renderActions: {
+        addMenu: []
+      }
+    }
+  };
+</script>
+<!-- 2. ★매우 중요: MathJax 엔진 라이브러리 불러오기 (이게 없어서 안 됐던 것임) -->
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js" id="MathJax-script" async></script>
+    <!-- 3. ★디지털 가든 테마 대응: 페이지 클릭 시 수식 다시 그리기 -->
+    <script>
+      const observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+          if (mutation.addedNodes.length && window.MathJax && window.MathJax.typeset) {
+            window.MathJax.typeset();
+          }
+        });
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+    </script>
+  </body>
+</html>
