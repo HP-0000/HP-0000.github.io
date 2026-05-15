@@ -1,0 +1,108 @@
+---
+---
+
+리소스 배리어는 리소스의 용도와 상태 변경을 명시하여 충돌을 방지하고 
+작업을 동기화하기 위해 사용하는 명령이다.
+```
+typedef enum D3D12_RESOURCE_BARRIER_TYPE  
+{ 
+	// 리소스 사용 상태 변경
+    D3D12_RESOURCE_BARRIER_TYPE_TRANSITION = 0, 
+    // 메모리 매핑이 같은 리소스 간 사용 전환
+    D3D12_RESOURCE_BARRIER_TYPE_ALIASING = (D3D12_RESOURCE_BARRIER_TYPE_TRANSITION + 1), 
+    // 메모리 접근 순서 동기화
+    D3D12_RESOURCE_BARRIER_TYPE_UAV = (D3D12_RESOURCE_BARRIER_TYPE_ALIASING + 1)   
+}D3D12_RESOURCE_BARRIER_TYPE;
+
+typedef enum D3D12_RESOURCE_BARRIER_FLAGS  
+{  
+    D3D12_RESOURCE_BARRIER_FLAG_NONE    = 0,  // 즉시 적용
+    D3D12_RESOURCE_BARRIER_FLAG_BEGIN_ONLY  = 0x1,  // 상태 전환 배리어 시작
+    D3D12_RESOURCE_BARRIER_FLAG_END_ONLY    = 0x2  // 상태 전환 배리어 종료
+}D3D12_RESOURCE_BARRIER_FLAGS;
+
+typedef struct D3D12_RESOURCE_BARRIER  
+{  
+    D3D12_RESOURCE_BARRIER_TYPE Type;  
+    D3D12_RESOURCE_BARRIER_FLAGS Flags;  
+    union   
+	{  
+        D3D12_RESOURCE_TRANSITION_BARRIER Transition;  
+        D3D12_RESOURCE_ALIASING_BARRIER Aliasing;  
+        D3D12_RESOURCE_UAV_BARRIER UAV;  
+	};
+}D3D12_RESOURCE_BARRIER;
+        
+void ID3D12GraphicsCommandList::ResourceBarrier(
+	UINT NumBarriers, // 배리어 개수
+	const D3D12_RESOURCE_BARRIER *pBarriers); // 배리어 배열
+```
+
+# 상태 전환 배리어
+
+```
+typedef enum D3D12_RESOURCE_STATES  
+{  
+    D3D12_RESOURCE_STATE_COMMON = 0,  // 초기 상태
+    D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER = 0x1,  // 정점 버퍼 또는 상수 버퍼
+    D3D12_RESOURCE_STATE_INDEX_BUFFER   = 0x2,  // 인덱스 버퍼
+    D3D12_RESOURCE_STATE_RENDER_TARGET  = 0x4,  // 렌더 타겟
+    D3D12_RESOURCE_STATE_UNORDERED_ACCESS   = 0x8,  //UAV 읽기,쓰기 가능
+    D3D12_RESOURCE_STATE_DEPTH_WRITE    = 0x10,  // 깊이/스텐실 버퍼 쓰기.
+    D3D12_RESOURCE_STATE_DEPTH_READ = 0x20,   // 깊이/스텐실 버퍼 읽기.
+    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE  = 0x40, // 픽셀 셰이더에 쓰이지 않음
+    D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE  = 0x80,  //픽셀 셰이더에 쓰임
+    D3D12_RESOURCE_STATE_STREAM_OUT = 0x100,  // 스트림 출력 단계
+    D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT  = 0x200,  // ExecuteIndirect 인자 버퍼
+    D3D12_RESOURCE_STATE_COPY_DEST  = 0x400,  //  리소스의 복사 목적지
+    D3D12_RESOURCE_STATE_COPY_SOURCE    = 0x800,  //  리소스 복사 출발지
+    D3D12_RESOURCE_STATE_RESOLVE_DEST   = 0x1000,  //  MSAA 해상도 목적지
+    D3D12_RESOURCE_STATE_RESOLVE_SOURCE = 0x2000,  //  MSAA 해상도 출발지.
+    D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE  = 0x400000,  //레이트레이싱 가속 구조체
+    D3D12_RESOURCE_STATE_SHADING_RATE_SOURCE    = 0x1000000,  // 가변 쉐이딩 레이트 이미지
+    D3D12_RESOURCE_STATE_RESERVED_INTERNAL_8000 = 0x8000,  //
+    D3D12_RESOURCE_STATE_RESERVED_INTERNAL_4000 = 0x4000,  //
+    D3D12_RESOURCE_STATE_RESERVED_INTERNAL_100000   = 0x100000,  //
+    D3D12_RESOURCE_STATE_RESERVED_INTERNAL_40000000 = 0x40000000,  //
+    D3D12_RESOURCE_STATE_RESERVED_INTERNAL_80000000 = 0x80000000,  //
+    D3D12_RESOURCE_STATE_GENERIC_READ = (((((0x1|0x2) | 0x40)|0x80)|0x200)|0x800), //읽기 상태 조합 
+    D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE = (0x40|0x80), // 모든 셰이더 단계에서 읽을 수 있는 리소스
+    D3D12_RESOURCE_STATE_PRESENT    = 0,  // 스왑 체인 프레젠트 시 사용
+    D3D12_RESOURCE_STATE_PREDICATION    = 0x200,  // INDIRECT_ARGUMENT와 동일, 프레디케이션 버퍼.
+    D3D12_RESOURCE_STATE_VIDEO_DECODE_READ  = 0x10000,  // 비디오 디코딩 읽기
+    D3D12_RESOURCE_STATE_VIDEO_DECODE_WRITE = 0x20000,  // 비디오 디코딩 쓰기.
+    D3D12_RESOURCE_STATE_VIDEO_PROCESS_READ = 0x40000,  // 비디오 처리 읽기.
+    D3D12_RESOURCE_STATE_VIDEO_PROCESS_WRITE    = 0x80000,  // 비디오 처리 쓰기.
+    D3D12_RESOURCE_STATE_VIDEO_ENCODE_READ  = 0x200000,  // 비디오 인코딩 읽기. 
+    D3D12_RESOURCE_STATE_VIDEO_ENCODE_WRITE = 0x800000  // 비디오 인코딩 쓰기.
+}D3D12_RESOURCE_STATES;
+
+typedef struct D3D12_RESOURCE_TRANSITION_BARRIER  
+{  
+    ID3D12Resource *pResource;  
+    UINT Subresource;  // 서브 리소스 인덱스
+    D3D12_RESOURCE_STATES StateBefore; // 전환 전 상태 
+    D3D12_RESOURCE_STATES StateAfter;  // 전환 후 상태
+}D3D12_RESOURCE_TRANSITION_BARRIER;
+```
+
+# 별칭 배리어
+같은 메모리 공간에 배치된 리소스 전환 명시
+```
+typedef struct D3D12_RESOURCE_ALIASING_BARRIER  
+{  
+    ID3D12Resource *pResourceBefore;  
+    ID3D12Resource *pResourceAfter;  
+}D3D12_RESOURCE_ALIASING_BARRIER;
+```
+
+#  UAV 배리어
+이전 UAV 접근이 끝난 뒤에 UAV 접근 가능
+```
+typedef struct D3D12_RESOURCE_UAV_BARRIER  
+{  
+    ID3D12Resource *pResource;  
+}D3D12_RESOURCE_UAV_BARRIER;
+```
+
+
