@@ -8,7 +8,7 @@
 ###### `std::remove_reference_t<T>`
 - [참조](Public/Study/C++/Docs/참조.md) 제거 (`T&`, `T&&` $\rightarrow$ `T`)
 ###### `std::remove_const_t<T>`
-[const, mutable](Public/Study/C++/Docs/const,%20mutable.md)
+[const, mutable](Public/Study/C++/Docs/Compile/const,%20mutable.md)
 `const T*`, `T const*`, `const T&`, `T const&` 를 제외하고
 `const`를 제거 한다.
 ###### `std::remove_pointer_t<T>`
@@ -29,7 +29,7 @@
 조건에 따라 `TypeA` 또는`TypeB` 가 된다.
 ###### `std::enable_if_t<bool, T>`
 `true`일 때만 유효한 타입 `T`가 된다.
-[Substitution_Failure_Is_Not_An_Error](Public/Study/C++/Docs/Substitution_Failure_Is_Not_An_Error.md) 를 유도하는데 주로 사용된다.
+[Substitution_Failure_Is_Not_An_Error](Public/Study/C++/Docs/Compile/Substitution_Failure_Is_Not_An_Error.md) 를 유도하는데 주로 사용된다.
 # 타입 검사
 
 ###### `std::is_same_v<T, U>`

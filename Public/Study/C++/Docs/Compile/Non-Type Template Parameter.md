@@ -42,7 +42,7 @@ tile1 = tile3 // ❌ 컴파일 에러 different Type
 
 ---
 
-NTTP 사용시, [auto](Public/Study/C++/Docs/auto.md) 를 사용해 추론된 인자로 선언된 템플릿을 사용할 때
+NTTP 사용시, [auto](Public/Study/C++/Docs/Compile/auto.md) 를 사용해 추론된 인자로 선언된 템플릿을 사용할 때
 ```cpp
 template <auto N>
 struct MyTool;

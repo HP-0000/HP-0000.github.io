@@ -14,6 +14,7 @@ const int&  GetTarget(const FString& InName)  const
 함수 안에서 매개변수의 값은 읽기 전용임
 매개 변수가 참조나 포인터인 경우 함수는 오버로딩된다.
 ###### 함수 끝에 붙을 때
+[Implicit Object Parameter](Public/Study/C++/Docs/Compile/Implicit%20Object%20Parameter.md) 
 함수 안에서 클래스 멤버 변수 값은 읽기 전용임
 함수는 오버로딩된다.
 ###### mutable

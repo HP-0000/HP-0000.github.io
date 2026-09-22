@@ -24,7 +24,7 @@ template <auto N>
 struct Percentage requires (N >= 0 && N <= 100);
 ```
 
-인스턴스 제약을 주기 위해 [Substitution_Failure_Is_Not_An_Error](Public/Study/C++/Docs/Substitution_Failure_Is_Not_An_Error.md)을 이용하려면 다음과 같이 템플릿을 중첩해서 작성해야 하며 가독성과 유지보수성이 크게 떨어진다. 또한 컴파일러가 불필요한 템플릿 인스턴스화를 반복하면서 컴파일 비용도 증가한다.
+인스턴스 제약을 주기 위해 [Substitution_Failure_Is_Not_An_Error](Public/Study/C++/Docs/Compile/Substitution_Failure_Is_Not_An_Error.md)을 이용하려면 다음과 같이 템플릿을 중첩해서 작성해야 하며 가독성과 유지보수성이 크게 떨어진다. 또한 컴파일러가 불필요한 템플릿 인스턴스화를 반복하면서 컴파일 비용도 증가한다.
 
 ```cpp
 template <typename T, 
@@ -53,7 +53,7 @@ public:
 };
 ```
 ###### 변수 제약
-[auto](Public/Study/C++/Docs/auto.md) 의 추론된 타입에 대해 제약을 검증한다.
+[auto](Public/Study/C++/Docs/Compile/auto.md) 의 추론된 타입에 대해 제약을 검증한다.
 ```cpp
 std::integral auto x = 10;   // int
 std::integral auto y = 3.14; // 컴파일 에러

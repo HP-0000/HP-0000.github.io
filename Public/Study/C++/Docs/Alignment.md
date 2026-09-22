@@ -43,4 +43,12 @@ size_t n3 = alignof(MyStruct); // int를 따라 4 반환
 
 ---
 
-
+[스레드_동기화](Public/Study/C++/Docs/ThreadSync/스레드_동기화.md) 
+C++17부터 거짓 공유를 방지하는 표준 상수를 제공한다.
+```cpp
+#include <new>
+struct alignas(std::hardware_destructive_interference_size) ThreadData 
+{
+    uint64_t counter;
+};
+```

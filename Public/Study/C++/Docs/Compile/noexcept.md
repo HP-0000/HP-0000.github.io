@@ -37,5 +37,5 @@ bool b2 = noexcept(funcB) // false
 
 ---
 [type_traits](Public/Study/C++/Docs/Type%20Traits/type_traits.md) 를 통해 `noexcept` 키워드의 유무를 판단할 수 있다.
-C++표준 자료구조(STL) 는 if [constexpr](Public/Study/C++/Docs/constexpr.md) 을 활용해 
+C++표준 자료구조(STL) 는 if [constexpr](Public/Study/C++/Docs/Compile/constexpr.md) 을 활용해 
 타입 `T` 의 이동할 때 `noexcept` 인지에 따라 복사와 이동을 결정한다.

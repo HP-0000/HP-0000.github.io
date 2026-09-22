@@ -11,4 +11,4 @@ Virtual 키워드가 존재하는 클래스에 대하여 하나의 VTABLE이 만
 직접 주소를 명령어 안에 박을 수 없다. 즉 런타임에는 메모리로 부터 직접 주소를 
 읽는 작업이 필요해지고, 성능 이슈가 생긴다.
 
-[Curiously Recurring Template Pattern](/Public/Study/C++/Docs/Curiously%20Recurring%20Template%20Pattern)
+[Curiously Recurring Template Pattern](Public/Study/C++/Docs/Design%20Pattern/Curiously%20Recurring%20Template%20Pattern.md)
