@@ -1,4 +1,4 @@
-C++20 부터 일반 함수 매개변수 자리에 [auto](Public/Study/C++/Docs/auto.md)를 작성하면
+C++20 부터 일반 함수 매개변수 자리에 [auto](Public/Study/C++/Docs/Compile/auto.md)를 작성하면
 컴파일러가 이를 템플릿 함수로 변환해준다.
 ###### 제약 없는 템플릿
 ```cpp

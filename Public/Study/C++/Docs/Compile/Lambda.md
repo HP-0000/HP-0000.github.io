@@ -11,7 +11,6 @@
 	... 
 };
 ```
-
 ###### C++20 템플릿 람다
 ```cpp
 auto x = [캡처]<typename T>(인자) -> 반환타입
@@ -20,7 +19,6 @@ auto x = [캡처]<typename T>(인자) -> 반환타입
 };
 ```
 ###### Overload 패턴
-
 ```cpp
 template<typename... Ts> 
 struct overloaded : Ts... 
@@ -36,8 +34,6 @@ auto x = overloaded
 };
 ```
 
-`overloaded` 는 [생성자 호출] 의 `Aggregate initialization` 을 거친다.
+`overloaded` 는 [초기화](Public/Study/C++/Docs/초기화.md) 의 `Aggregate initialization` 을 거친다.
 상속 받은 부모 생성자로 람다 표현식이 전달되는데 `prvalue` 임으로
 부모 서브 오브젝트 메모리 위치에 직접 생성된다.
-
-

@@ -25,5 +25,5 @@
 최상위 호출 스택까지 모두 언와인딩되었음에도 일치하는 catch 블록을 전혀 찾지 못하면
 런타임 시스템이 `std::terminate()`를 호출하여 프로그램을 비정상 강제 종료한다.
 
-[noexcept](Public/Study/C++/Docs/noexcept.md) 가 붙은 함수 내부에서 예외가 처리되지 못하면
+[noexcept](Public/Study/C++/Docs/Compile/noexcept.md) 가 붙은 함수 내부에서 예외가 처리되지 못하면
 C++ 런타임은 즉시 `std::terminate()`를 호출하여 프로그램을 종료시킨다.

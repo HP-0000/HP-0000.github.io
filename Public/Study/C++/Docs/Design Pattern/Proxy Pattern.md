@@ -10,4 +10,4 @@
 접근을 제어하기 위해 사용한다.
 
 객체를 감싼다는 점에서는 동일하지만 기능을 계속 덧붙인다는 점에서 다음과 같은 패턴이 있다. 
-[Decorator](Public/Study/C++/Docs/Design%20Pattern/Decorator.md)
+[Decorator Pattern](Public/Study/C++/Docs/Design%20Pattern/Decorator%20Pattern.md)
